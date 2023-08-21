@@ -1,4 +1,3 @@
-import { hash } from 'bcrypt';
 import { Service } from 'typedi';
 import { HttpException } from '@exceptions/httpException';
 import { User } from '@interfaces/users.interface';
@@ -6,9 +5,12 @@ import { UserModel } from '@models/users.model';
 
 @Service()
 export class UserService {
-  public async findAllUser(): Promise<User[]> {
+  public async findAllUser(): Promise<User> {
     const users: User[] = await UserModel.find();
-    return users;
+    if (users[0].isDelete === true) {
+      throw new HttpException(409, "User doesn't exist");
+    }
+    return users[0];
   }
 
   public async findUserById(userId: string): Promise<User> {
@@ -22,8 +24,7 @@ export class UserService {
     const findUser: User = await UserModel.findOne({ email: userData.email });
     if (findUser) throw new HttpException(409, `This email ${userData.email} already exists`);
 
-    const hashedPassword = await hash(userData.password, 10);
-    const createUserData: User = await UserModel.create({ ...userData, password: hashedPassword });
+    const createUserData: User = await UserModel.create(userData);
 
     return createUserData;
   }
@@ -34,21 +35,22 @@ export class UserService {
       if (findUser && findUser._id != userId) throw new HttpException(409, `This email ${userData.email} already exists`);
     }
 
-    if (userData.password) {
-      const hashedPassword = await hash(userData.password, 10);
-      userData = { ...userData, password: hashedPassword };
-    }
-
-    const updateUserById: User = await UserModel.findByIdAndUpdate(userId, { userData });
+    const updateUserById: User = await UserModel.findByIdAndUpdate(userId, { userData }, { new: true });
     if (!updateUserById) throw new HttpException(409, "User doesn't exist");
 
     return updateUserById;
   }
 
   public async deleteUser(userId: string): Promise<User> {
-    const deleteUserById: User = await UserModel.findByIdAndDelete(userId);
-    if (!deleteUserById) throw new HttpException(409, "User doesn't exist");
+    const updateUserById: User = await UserModel.findByIdAndUpdate(
+      userId,
+      { isDelete: true },
+      {
+        new: true,
+      },
+    );
+    if (!updateUserById) throw new HttpException(409, "User doesn't exist");
 
-    return deleteUserById;
+    return updateUserById;
   }
 }
